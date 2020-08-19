@@ -1,0 +1,642 @@
+; Instituto Tecnologico de Costa Rica                                       ;
+; Area Academica de Ingenieria en Computadores                              ;
+; CE 4301 - Arquitectura de Computadores I                                  ;
+; Proyecto Individual                                                       ;
+; Diseno e Implementacion de una aplicacion para la Nitidez de Imagenes     ;
+; Alumno: Edgar Chaves Gonzalez. 2017239281                                 ;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+%include "io.inc"
+;---Funcion llamada en la primera etapa---
+extern atoi 
+;---Funciones llamada en la tercer etapa---
+extern sprintf
+extern strlen
+;----------------------------
+section .bss
+;---Variable Primera etapa---
+fd_in resb 1                     ; para la etapa de abrir el archivo.
+;---Variable Tercer etapa---
+fd_out resb 1
+;---Variabe Quinta etapa
+fd_out2 resb 1
+;----------------------------
+section .data
+;---Variable Primera etapa---
+X dd 0
+Y dd 0
+TotalSize dd 0
+FileSize dd 0
+Tsize       equ 9999999         ; tamano max de la imagen
+file_name1          db "/home/edgar/Desktop/Proyecto-Edgar-Chaves/imagenGris1.bin" ; imagen convertida en numeros y lista para analizar por ensamblador.
+array TIMES Tsize   dq 0        ; Array en el que se va a guardar toda la imagen leida del archivo.pixelesX * pixelesY.
+Fsize       equ 9999999         ; Tamano max de una imagen en bytes.
+info1 TIMES Fsize   dq 0        ; buffer donde se guardara toda la informacion que se lea del archivo.
+;----------------------------
+;---Variables Segunda etapa---
+xdeseado    equ 2
+ydeseado    equ 1
+Xdim dd 0
+Ydim dd 0
+XimgSize dd 0
+YimgSize dd 0
+matrizSalida TIMES Tsize dd 0   ; Matriz en la que se va guardando el resultado de la convolucion de cada pixel.
+kernel      dd   0,-1, 0
+            dd  -1, 5,-1
+            dd   0,-1, 0        ; kernel de prueba
+Xcounter    dd -1               ; contador de la coordenada x de la imagen.
+Ycounter    dd  0               ; contador de la coordenada y de la imagen.
+s           dd -2               ; contador x del kernel (deberia ser -1)
+t           dd -1               ; contador y del kernel
+m           dd 0
+n           dd 0
+valorKernel dd 0
+valorImagen dd 0 
+resultadoPixel  dd 0            ; suma de todos los valores para dar el nuevo valor a la imagen final.
+;----------------------------
+;---Variables Tercer etapa---
+coma dd ","
+text dd "%i"
+buffer TIMES 1 db 0 
+file_name db '/home/edgar/Desktop/Proyecto-Edgar-Chaves/sharpening.txt', 0x0
+space db ""
+;----------------------------
+;---Variables Cuarta etapa---
+xdeseado2    equ 2
+ydeseado2    equ 1
+Xdim2        dd 0
+Ydim2        dd 0
+XimgSize2    dd 0
+YimgSize2    dd 0
+matrizSalida2 TIMES Tsize dd 0   ; Matriz en la que se va guardando el resultado de la convolucion de cada pixel.
+Xcounter2    dd -1               ; contador de la coordenada x de la imagen.
+Ycounter2    dd  0               ; contador de la coordenada y de la imagen.
+s2           dd -2               ; contador x del kernel (deberia ser -1)
+t2           dd -1               ; contador y del kernel
+m2           dd 0
+n2           dd 0
+valorKernel2 dd 0
+valorImagen2 dd 0 
+resultadoPixel2  dd 0            ; suma de todos los valores para dar el nuevo valor a la imagen final.
+;----------------------------
+;---Variables Quinta etapa---
+coma2 dd ","
+text2 dd "%i"
+buffer2 TIMES 1 db 0 
+file_name2 db "/home/edgar/Desktop/Proyecto-Edgar-Chaves/oversharpening.txt", 0x0
+
+section .text
+global CMAIN
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------0) Etapa Previa:Toma los valores X, Y, tamanno en bytes de la imagen .---------------
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+CMAIN:
+    mov ebp, esp; for correct debugging
+    mov ebp, esp; for correct debugging
+    mov eax, 0
+    mov ebx, 0
+    mov ecx, 0
+    mov edx, 0
+    GET_DEC 4, eax
+    PRINT_DEC 4, eax
+    mov dword[X] , eax ; Obtiene la posicion X de la imagen
+    GET_DEC 4, ebx
+    PRINT_DEC 4, ebx
+    mov dword[Y], ebx ; Obtiene la posicion Y de la imagen
+    mul ebx  
+    mov dword[TotalSize], eax ; Calcula el tamanno total de la imagen
+    GET_DEC 4, ebx
+    PRINT_DEC 4, ebx
+    mov dword[FileSize], ebx ; Obtiene el tamanno en bytes del archivo
+    mov eax, dword[X]
+    sub eax, 1
+    mov dword[Xdim], eax
+    mov ebx, dword[Y]
+    sub ebx, 1
+    mov dword[Ydim], ebx
+    mov dword[XimgSize], eax
+    mov dword[YimgSize], ebx
+    mov dword[Xdim2], eax
+    mov dword[Ydim2], ebx
+    mov dword[XimgSize2], eax
+    mov dword[YimgSize2], ebx
+    
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------I) Etapa Inicial: abrir el archivo de la imagen convertida en numeros.---------------
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+mainAbrirArchivo:
+    ;--------------------------
+    ;abre el archivo
+    mov eax, 5
+    mov ebx, file_name1
+    mov ecx, 0
+    mov edx, 0777
+    int 0x80
+    mov [fd_in], eax
+    ;--------------------------
+    ;lee el archivo
+    mov eax, 3
+    mov ebx, [fd_in]
+    mov ecx, info1                  ; en la variable info1 esta todo el buffer del file.
+    ;mov edx, Fsize                 ; cantidad de bytes del archivo, peso del archivo a abrir.
+    mov edx, dword[FileSize]
+    int 0x80
+    ;--------------------------
+    ;cierra el archivo
+    mov eax, 6
+    mov ebx, [fd_in]
+    int 0x80
+    ;--------------------------
+    ; se va a iterar sobre info, que es el buffer del file.
+    mov ebx, -1                     ; contador del array.
+    mov edi, -1                     ; contador del buffer.
+recorreFile:
+    inc ebx
+    ; llama a atoi para transformar el caracter encontrado en el archivo en numero. Retorna el valor en eax.
+    push ebp
+    mov ebp, esp
+    push ecx
+    call atoi
+    mov esp, ebp
+    pop ebp
+    ;---------------------------Termina la llamada a atoi y en eax esta el valor.
+    mov dword[array + ebx*4], eax   ; guardo en el array antes creado el valor recien modificado por atoi y que se encuentra en eax. 
+    mov eax, 0
+    call eliminaElemento            ; elimina el primer el primer elemento del array.
+    ;inc edi
+    ;cmp edi, 2
+    ;cmp edi, Fsize
+    cmp edi, dword[FileSize]
+    jl recorreFile
+    jg final1
+eliminaElemento:
+    push ebp                        ; conserva el valor de ebp en el stack
+    mov ebp, esp                    ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    jmp eliminaElemento1
+eliminaElemento1:
+    inc edi
+    ;cmp edi, Fsize
+    cmp edi, dword[FileSize]
+    jg termino
+    mov al, [info1 + edi]
+    cmp al, 44
+    mov [info1 + edi], byte " "
+    jne eliminaElemento1
+    mov ecx, info1
+    mov esp, ebp
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret  
+termino:
+    mov ecx, info1
+    mov esp, ebp
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret  
+final1:
+    mov eax, 1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------II) Etapa Procesamiento: Aplica la convolucion entre el kernel y la imagen.---------------SHARPENING
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+mainConvolucion:
+    mov eax, 0
+    mov ebx, 0
+    mov ecx, 0
+    mov edx, 0
+recorreImagen:
+    inc dword[Xcounter]
+    ;call convolucion1Pixel
+    call convolucionMain
+    mov edx, dword[X]
+    sub edx, 1
+    cmp dword[Xcounter], edx
+    ;cmp dword[Xcounter], Xdim       ; compara si el contador x ya llego al final de una fila
+    jl recorreImagen                ; si lo anterior es menor entonces sigue el ciclo y salta a recorreImagen
+    ;je recorreImagen
+    jg setXincY                     ; de lo contrario salta a setXincY para setear a x al inicio e incrementar a y en 1.
+setXincY:
+    mov dword[Xcounter], -1
+    inc dword[Ycounter]
+    
+    mov edx, dword[Ydim]
+    cmp dword[Ycounter], edx
+    
+    ;cmp dword[Ycounter], Ydim
+    jl recorreImagen
+    je recorreImagen
+    jg convolucionTotal
+convolucionMain:
+    push ebp                        ; conserva el valor de ebp en el stack
+    mov ebp, esp                    ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    jmp convolucion1Pixel
+; Formula de convolucion g(x,y) = SS w(s,t)*f(x-s,y-t) donde w es la imagen y f es el kernel y g la imagen filtrada. 
+convolucion1Pixel:                  ; para prueba se hace con el pixel (0,0):
+    inc dword[s]
+    mov eax, dword[t]               ; montando el parametro y para la kernel (x)
+    mov ecx, dword[s]               ; montando el parametro x para la kernel (x)
+    mov edi, kernel                 ; subiendo la matriz kernel(x) al registro edi
+    mov esi, 3
+    call traductorCoordenadasKernel ; llamada a la funcion traductorCoordenadasKernel convierte sus cordenadas -1,0,1 a coordenadas normales de matriz.
+    call traductorCoordenadasImagen ; obtiene el valor que corresponde a las coordenadas indicadas.
+    mov dword[valorKernel], ebx     ; obtenido el resultado en ebx, se coloca en la variable valorKernel.
+    mov ecx, dword[Xcounter]        ; 
+    sub ecx, dword[s]               ; saca coordenada correspondiente a (x-s)
+    mov eax, dword[Ycounter]
+    sub eax, dword[t]               ; saca coordenada correspondiente a (y-t)
+    mov edi, array                  ; se carga en edi la matriz a analizar.
+    
+    ;mov esi, Xsize
+    mov esi, dword[X]
+    
+    call traductorCoordenadasImagen ; obtiene el valor que corresponde a las coordenadas indicadas.
+    mov dword[valorImagen], ebx     ; obtenido el resultado en ebx, se coloca en la variable valorkernel.
+    mov eax, dword[valorKernel]     ; paso el valor del kernel para ser multiplicado despues con el valorImagen.
+    mov ebx, dword[valorImagen]     ; paso el valor de la imagen para ser multiplicado
+    mul ebx                         ; hace la multiplicacion eax *= ebx que es valorkernel*valorImagen
+    add dword[resultadoPixel], eax  ; suma ese resultado a la suma general del nuevo pixel.
+    cmp dword[s], 1                 ; revisa si s llego a 1, significa que ya recorrio una fila de la matriz del kernel.
+    jl  convolucion1Pixel           ; si la comparacion anterior da menor entonces repite el ciclo y salta a convolucion1Pixel.
+    jmp setSincT                    ; si no entonces salta la etiqueta de setear s al inicio e incrementar en 1 a t.    
+setSincT:                           ; esta funcion setea s al incio de una fila del kernel e incrementa en 1 a t.
+    mov dword[s], -2                ; setea al inicio la variable s-> -a - 1.
+    inc dword[t]                    ; incrementa a t en 1-> t+=1.
+    cmp dword[t], 1                 ; compara si t llego a 1, pues seria el final de la matriz del kernel.
+    jl convolucion1Pixel            ; si el resultado es menor igual entonces sigue con el ciclo.
+    je convolucion1Pixel        
+    jg finalConvolucion
+;----Esta funcion traduce coordenadas x y de una matriz 2D a un numero que sea posible de acceder para una lista en 1D------------
+traductorCoordenadasImagen:         ; Parametros(eax:ydeseado, ebx: 0 , ecx: xdeseado, edi: matrizAnalizar, esi: tamano y de la matriz a analizar) ret en ebx: valor solicitado de la matriz.
+    push ebp                        ; conserva el valor de ebp en el stack
+    mov ebp, esp                    ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    ;-------las tres lineas anteriores: prolog de la funcion------- 
+    cmp eax, 0                      ; compara si ydeseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+    jl coordenadaXYnegativaOMayor   ; salta a coordenadaXYnegativa si la comparacion anterior da que es eax es menor a 0.
+    cmp ecx, 0                      ; compara si x deseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+    jl coordenadaXYnegativaOMayor   ; salta a coordenadaXYnegativa si la comparacion anterior da que es eax es menor a 0.
+    cmp eax, dword[YimgSize]
+    jg coordenadaXYnegativaOMayor   ; compara si x deseado es mayor a 0, el valor de ebx lo pone en 0 de una vez.
+    cmp ecx, dword[XimgSize]
+    jg coordenadaXYnegativaOMayor   ; compara si y deseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+   ; mov ebx, Ysize                  ; mueve el valor constante de la imagen a ebx.
+    mov ebx, esi
+    mul ebx                         ; multiplica ebx con eax. pero usa a edx para hacer la operacion, es por esto que en esta funcion no se puede usar edx para acceder.
+    add eax, ecx                    ; suma a eax el valor del xdeseado.
+    mov ebx, dword[edi + eax*4]     ; retorna el valor solicitado en ebx.
+    ;-------tres lineas que siguen: epilog, restoring the program--
+    mov esp, ebp
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion
+coordenadaXYnegativaOMayor:
+    mov ebx, 0                      ; pone en cero de una vez el valor de ebx.  
+    mov esp, ebp                    ; recupera el valor original de esp.
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion
+;---------------------------------------------------------------------------------------------------------------------------------
+traductorCoordenadasKernel:         ; Parametros (eax: ydeseado, ecx: xdeseado) en eax: valor de coordenada normal de matriz, en ebx: coordenada normal de una matriz.
+    push ebp                        ; conserva el valor de ebp en el stack
+    mov ebp, esp                    ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    ;-------las tres lineas anteriores: prolog de la funcion-------
+    cmp eax, 0                      ; compara si y deseado con 0.
+    jl ydeseadoMenos1               ; si es menor salta a ydeseadoMenos1
+    jg ydeseadoMayor1               ; si es mayor salta a ydeseadoMayor1
+    mov eax , 1                     ; de lo contrario pone a eax en 1, su equivalencia de indices kernel a normales. 
+    cmp ecx, 0                      ; compara valor de x deseado con 0
+    jl xdeseadoMenos1               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor1               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                      ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales. 
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion
+ydeseadoMenos1:
+    mov eax, 0                      ; mueve a eax a 0, su quivalente en coordenadas kernel a normales.
+    cmp ecx, 0                      ; compara si x deseado con 0.
+    jl xdeseadoMenos1               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor1               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                      ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion  
+ydeseadoMayor1:
+    mov eax, 2                      ; mueve a eax a 2, su quivalente en coordenadas kernel a normales.
+    cmp ecx, 0                      ; compara si x deseado con 0.
+    jl xdeseadoMenos1               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor1               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                      ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion
+xdeseadoMenos1:
+    mov ecx, 0                      ; pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion
+xdeseadoMayor1:
+    mov ecx, 2                      ; pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; retorna donde se habia hecho la llamada a la funcion 
+finalConvolucion:                   ; esta funcion va a modificar el pixel de la nueva imagen con el valor que dio la convolucion.
+    mov eax, dword[Ycounter]
+    mov ecx, dword[Xcounter]
+    mov edi, matrizSalida
+                    
+    ;mov ebx, Xsize                 ; mueve el valor constante de la imagen a ebx.
+    mov ebx, dword[X]
+   
+    mul ebx                         ; multiplica ebx con eax. pero usa a edx para hacer la operacion, es por esto que en esta funcion no se puede usar edx para acceder.
+    add eax, ecx                    ; suma a eax el valor del xdeseado.
+    mov ebx, dword[resultadoPixel]
+    mov dword[edi + eax*4], ebx
+    mov dword[resultadoPixel], 0
+    mov dword[t], -1
+    mov esp, ebp                    ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                         ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                             ; toma otra vez el valor de ebp, restoring de lo que solia ser
+convolucionTotal:
+    mov eax, 0 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------III) Etapa Guardado: Guarda la matriz generada en un archivo.--------------- SHARPENING
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+mainGuardado:
+    ;crear archivo donde se va a guardar la matriz
+    mov eax, 8
+    mov ebx, file_name
+    mov ecx, 0777
+    int 0x80
+    mov [fd_out], eax
+    mov edi, -1 ;contador
+writeInToFile:
+    inc edi
+    mov eax, dword[matrizSalida + edi*4] 
+    ;convierte el elemento de la lista en un string para que pueda ser escrito en un archivo.
+    mov ebp, esp
+    push eax
+    push text
+    push buffer
+    call sprintf                    ; esta funcion lo que hace es toma un numero(eax) y lo copia como string a buffer.
+    mov esp, ebp
+    
+    mov ebp, esp
+    push buffer
+    call strlen                     ; esta funcion obtiene el largo del caracter a guardar.
+    mov esp, ebp
+    ;///////////////////////////////////////////////////////////////////
+    ; escribir en el archivo el elemento de la lista.
+    ;mov edx, 3
+    mov edx, eax
+    mov ecx, buffer
+    mov ebx, [fd_out]
+    mov eax, 4
+    int 0x80
+    ;actualiza el file pointer
+    mov eax, 19
+    mov ebx, [fd_out]
+    mov ecx, 0
+    mov edx, 2
+    int 0x80
+    ; escribir en el archivo la coma, para que quede de una lista de la forma: a,b,c,d,...,n,...
+    mov edx, 1
+    mov ecx, coma
+    mov ebx, [fd_out]
+    mov eax, 4
+    int 0x80
+    ;actualiza el file pointer
+    mov eax, 19
+    mov ebx, [fd_out]
+    mov ecx, 0
+    mov edx, 2
+    int 0x80
+    
+    ;cmp edi, Tsize ; largo de la lista -1
+    cmp edi, dword[TotalSize]
+    jl writeInToFile
+    je writeInToFile
+    jg final
+final:
+    ;cierra el archivo
+    mov eax, 6
+    mov ebx, [fd_out]
+    int 0x80
+    
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------IV) Etapa Procesamiento: Aplica la convolucion entre el kernel y la imagen.---------------OVERSHARPENING
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+mainConvolucion2:
+    mov eax, 0
+    mov ebx, 0
+    mov ecx, 0
+    mov edx, 0
+recorreImagen2:
+    inc dword[Xcounter2]
+    ;call convolucion1Pixel
+    call convolucionMain2
+    mov edx, dword[Xdim2]
+    ;cmp dword[Xcounter2], Xdim2     ; compara si el contador x ya llego al final de una fila
+    cmp dword[Xcounter2], edx
+    jl recorreImagen2                ; si lo anterior es menor entonces sigue el ciclo y salta a recorreImagen
+    ;je recorreImagen2
+    jg setXincY2                     ; de lo contrario salta a setXincY para setear a x al inicio e incrementar a y en 1.
+setXincY2:
+    mov dword[Xcounter2], -1
+    inc dword[Ycounter2]
+    mov edx, dword[Ydim2]
+    ;cmp dword[Ycounter2], Ydim2
+    cmp dword[Ycounter2], edx
+    jl recorreImagen2
+    je recorreImagen2
+    jg convolucionTotal2
+convolucionMain2:
+    push ebp                         ; conserva el valor de ebp en el stack
+    mov ebp, esp                     ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    jmp convolucion1Pixel2
+; Formula de convolucion g(x,y) = SS w(s,t)*f(x-s,y-t) donde w es la imagen y f es el kernel y g la imagen filtrada. 
+convolucion1Pixel2:                  ; para prueba se hace con el pixel (0,0):
+    inc dword[s2]
+    mov eax, dword[t2]               ; montando el parametro y para la kernel (x)
+    mov ecx, dword[s2]               ; montando el parametro x para la kernel (x)
+    mov edi, kernel                  ; subiendo la matriz kernel(x) al registro edi
+    mov esi, 3
+    call traductorCoordenadasKernel2 ; llamada a la funcion traductorCoordenadasKernel convierte sus cordenadas -1,0,1 a coordenadas normales de matriz.
+    call traductorCoordenadasImagen2 ; obtiene el valor que corresponde a las coordenadas indicadas.
+    mov dword[valorKernel2], ebx     ; obtenido el resultado en ebx, se coloca en la variable valorKernel.
+    mov ecx, dword[Xcounter2]        ; 
+    sub ecx, dword[s2]               ; saca coordenada correspondiente a (x-s)
+    mov eax, dword[Ycounter2]
+    sub eax, dword[t2]               ; saca coordenada correspondiente a (y-t)
+    mov edi, matrizSalida                  ; se carga en edi la matriz a analizar.
+    
+    ;mov esi, Xsize
+    mov esi, dword[X] 
+    call traductorCoordenadasImagen2 ; obtiene el valor que corresponde a las coordenadas indicadas.
+    mov dword[valorImagen2], ebx     ; obtenido el resultado en ebx, se coloca en la variable valorkernel.
+    mov eax, dword[valorKernel2]     ; paso el valor del kernel para ser multiplicado despues con el valorImagen.
+    mov ebx, dword[valorImagen2]     ; paso el valor de la imagen para ser multiplicado
+    mul ebx                          ; hace la multiplicacion eax *= ebx que es valorkernel*valorImagen
+    add dword[resultadoPixel2], eax  ; suma ese resultado a la suma general del nuevo pixel.
+    cmp dword[s2], 1                 ; revisa si s llego a 1, significa que ya recorrio una fila de la matriz del kernel.
+    jl  convolucion1Pixel2           ; si la comparacion anterior da menor entonces repite el ciclo y salta a convolucion1Pixel.
+    jmp setSincT2                    ; si no entonces salta la etiqueta de setear s al inicio e incrementar en 1 a t.    
+setSincT2:                           ; esta funcion setea s al incio de una fila del kernel e incrementa en 1 a t.
+    mov dword[s2], -2                ; setea al inicio la variable s-> -a - 1.
+    inc dword[t2]                    ; incrementa a t en 1-> t+=1.
+    cmp dword[t2], 1                 ; compara si t llego a 1, pues seria el final de la matriz del kernel.
+    jl convolucion1Pixel2            ; si el resultado es menor igual entonces sigue con el ciclo.
+    je convolucion1Pixel2        
+    jg finalConvolucion2
+;----Esta funcion traduce coordenadas x y de una matriz 2D a un numero que sea posible de acceder para una lista en 1D------------
+traductorCoordenadasImagen2:         ; Parametros(eax:ydeseado, ebx: 0 , ecx: xdeseado, edi: matrizAnalizar, esi: tamano y de la matriz a analizar) ret en ebx: valor solicitado de la matriz.
+    push ebp                         ; conserva el valor de ebp en el stack
+    mov ebp, esp                     ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    ;-------las tres lineas anteriores: prolog de la funcion------- 
+    cmp eax, 0                       ; compara si ydeseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+    jl coordenadaXYnegativaOMayor2   ; salta a coordenadaXYnegativa si la comparacion anterior da que es eax es menor a 0.
+    cmp ecx, 0                       ; compara si x deseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+    jl coordenadaXYnegativaOMayor2   ; salta a coordenadaXYnegativa si la comparacion anterior da que es eax es menor a 0.
+    cmp eax, dword[YimgSize2]
+    jg coordenadaXYnegativaOMayor2   ; compara si x deseado es mayor a 0, el valor de ebx lo pone en 0 de una vez.
+    cmp ecx, dword[XimgSize2]
+    jg coordenadaXYnegativaOMayor2   ; compara si y deseado es menor a 0, el valor de ebx lo pone en 0 de una vez.
+   ; mov ebx, Ysize                  ; mueve el valor constante de la imagen a ebx.
+    mov ebx, esi
+    mul ebx                          ; multiplica ebx con eax. pero usa a edx para hacer la operacion, es por esto que en esta funcion no se puede usar edx para acceder.
+    add eax, ecx                     ; suma a eax el valor del xdeseado.
+    mov ebx, dword[edi + eax*4]      ; retorna el valor solicitado en ebx.
+    ;-------tres lineas que siguen: epilog, restoring the program--
+    mov esp, ebp
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion
+coordenadaXYnegativaOMayor2:
+    mov ebx, 0                       ; pone en cero de una vez el valor de ebx.  
+    mov esp, ebp                     ; recupera el valor original de esp.
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion
+;---------------------------------------------------------------------------------------------------------------------------------
+traductorCoordenadasKernel2:         ; Parametros (eax: ydeseado, ecx: xdeseado) en eax: valor de coordenada normal de matriz, en ebx: coordenada normal de una matriz.
+    push ebp                         ; conserva el valor de ebp en el stack
+    mov ebp, esp                     ; guarda el valor de esp en ebp para poder retornar su valor original al final.
+    sub esp, 2
+    ;-------las tres lineas anteriores: prolog de la funcion-------
+    cmp eax, 0                       ; compara si y deseado con 0.
+    jl ydeseadoMenos12               ; si es menor salta a ydeseadoMenos1
+    jg ydeseadoMayor12               ; si es mayor salta a ydeseadoMayor1
+    mov eax , 1                      ; de lo contrario pone a eax en 1, su equivalencia de indices kernel a normales. 
+    cmp ecx, 0                       ; compara valor de x deseado con 0
+    jl xdeseadoMenos12               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor12               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                       ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales. 
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion
+ydeseadoMenos12:
+    mov eax, 0                       ; mueve a eax a 0, su quivalente en coordenadas kernel a normales.
+    cmp ecx, 0                       ; compara si x deseado con 0.
+    jl xdeseadoMenos12               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor12               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                       ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion  
+ydeseadoMayor12:
+    mov eax, 2                       ; mueve a eax a 2, su quivalente en coordenadas kernel a normales.
+    cmp ecx, 0                       ; compara si x deseado con 0.
+    jl xdeseadoMenos12               ; si es menor salta a xdeseadoMenos1
+    jg xdeseadoMayor12               ; si es mayor salta a xdeseadoMayor1
+    mov ecx, 1                       ; de lo contrario pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion
+xdeseadoMenos12:
+    mov ecx, 0                       ; pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion
+xdeseadoMayor12:
+    mov ecx, 2                       ; pone a ecx en 1, su equivalencia de indices kernel a normales.
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; retorna donde se habia hecho la llamada a la funcion 
+finalConvolucion2:                   ; esta funcion va a modificar el pixel de la nueva imagen con el valor que dio la convolucion.
+    mov eax, dword[Ycounter2]
+    mov ecx, dword[Xcounter2]
+    mov edi, matrizSalida2
+                     
+    ;mov ebx, Xsize                  ; mueve el valor constante de la imagen a ebx.
+    mov ebx, dword[X]
+    mul ebx                          ; multiplica ebx con eax. pero usa a edx para hacer la operacion, es por esto que en esta funcion no se puede usar edx para acceder.
+    add eax, ecx                     ; suma a eax el valor del xdeseado.
+    mov ebx, dword[resultadoPixel2]
+    mov dword[edi + eax*4], ebx
+    mov dword[resultadoPixel2], 0
+    mov dword[t2], -1
+    mov esp, ebp                     ; regresa el valor original del esp antes de la llamda a la funcion
+    pop ebp                          ; toma otra vez el valor de ebp, restoring de lo que solia ser
+    ret                              ; toma otra vez el valor de ebp, restoring de lo que solia ser
+convolucionTotal2:
+    mov eax, 0 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;-----------V) Etapa Guardado: Guarda la matriz generada en un archivo.---------------  OVERSHARPENING
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+mainGuardado2:
+    ;crear archivo donde se va a guardar la matriz
+    mov eax, 8
+    mov ebx, file_name2
+    mov ecx, 0777
+    int 0x80
+    mov [fd_out2], eax
+    mov edi, -1 ;contador
+writeInToFile2:
+    inc edi
+    mov eax, dword[matrizSalida2 + edi*4] 
+    ;convierte el elemento de la lista en un string para que pueda ser escrito en un archivo.
+    mov ebp, esp
+    push eax
+    push text
+    push buffer
+    call sprintf                    ; esta funcion lo que hace es toma un numero(eax) y lo copia como string a buffer.
+    mov esp, ebp
+    
+    mov ebp, esp
+    push buffer
+    call strlen                     ; esta funcion obtiene el largo del caracter a guardar.
+    mov esp, ebp
+    ;///////////////////////////////////////////////////////////////////
+    ; escribir en el archivo el elemento de la lista.
+    ;mov edx, 3
+    mov edx, eax
+    mov ecx, buffer
+    mov ebx, [fd_out2]
+    mov eax, 4
+    int 0x80
+    ;actualiza el file pointer
+    mov eax, 19
+    mov ebx, [fd_out2]
+    mov ecx, 0
+    mov edx, 2
+    int 0x80
+    ; escribir en el archivo la coma, para que quede de una lista de la forma: a,b,c,d,...,n,...
+    mov edx, 1
+    mov ecx, coma
+    mov ebx, [fd_out2]
+    mov eax, 4
+    int 0x80
+    ;actualiza el file pointer
+    mov eax, 19
+    mov ebx, [fd_out2]
+    mov ecx, 0
+    mov edx, 2
+    int 0x80
+    
+    ;cmp edi, Tsize ; largo de la lista -1
+    cmp edi, dword[TotalSize]
+    jl writeInToFile2
+    je writeInToFile2
+    jg final2
+final2:
+    ;cierra el archivo
+    mov eax, 6
+    mov ebx, [fd_out2]
+    int 0x80
+   
